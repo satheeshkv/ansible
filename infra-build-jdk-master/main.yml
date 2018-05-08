@@ -1,0 +1,7 @@
+---
+
+- name: Install the JDK
+  hosts: jdkServers
+  roles:
+   - install-jdk
+

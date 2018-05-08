@@ -1,0 +1,69 @@
+---
+
+ - name: Assure access to /charter tree
+   become: yes
+   become_user: root
+   file:
+     path: "{{ item }}"
+     state: directory
+     mode: 0777
+   with_items:
+     - '/charter/'
+     - '/charter/java/'
+     - '/charter/java/{{ JDKV | dirname }}'
+
+# - name: Pull the artifactory copy
+#   become_user: root
+#   get_url:
+#     url: "http://192.168.31.5:8081/artifactory/service-delivery-platform-local/common/java/{{ JDKV }}"
+#     dest: "/charter/java/{{ JDKV }}"
+#     mode: 0754
+
+ - name: unzip the archive
+   become: yes
+   become_user: root
+   unarchive:
+     remote_src: yes
+     src: "http://192.168.31.5:8081/artifactory/service-delivery-platform-local/common/java/{{ JDKV }}"
+     dest: "/charter/java/{{ JDKV | dirname }}"
+     mode: 0777
+#     src: "/charter/java/{{ JDKV }}"
+#   with_items: "{{ '/charter/jdk-*-linux-x64.tar.gz' | fileglob }}"
+
+ - name: Remove any old version data tempfile
+   become: yes
+   become_user: root
+   file:
+     state: absent
+     path: /tmp/newJava.version
+
+ - name: locate the new java
+   shell: find /charter/java/{{ JDKV | dirname }} -type f -name java
+   register: exe_lst
+
+ - name: Try to execute the new java
+   shell: "{{ item }} -version >> /tmp/newJava.version 2>&1"
+   with_items: 
+     - "{{ exe_lst.stdout_lines }}"
+
+ - name: Make sure it ran
+   shell: grep '^java version ' /tmp/newJava.version  
+
+ - name: locate all the java.security files on this system
+   become: yes
+   become_user: root
+   shell: find / -name java.security || echo unable to search
+   register: cfg_lst
+
+# change /dev/urandom to dev/./urandom to workaround the obsolete workaround...
+# c.f. http://www.thezonemanager.com/2015/07/whats-so-special-about-devurandom.html
+ - name: Update /dev/urandom entropy gathering to speed subsequent processes
+   become: yes
+   become_user: root
+   lineinfile:
+     dest: '{{ item }}'
+     regexp: '^ *securerandom.source=file:/dev/([.]/)?u?random'
+     line: 'securerandom.source=file:/dev/./urandom'
+   with_items:
+     - "{{ cfg_lst.stdout_lines }}"
+
